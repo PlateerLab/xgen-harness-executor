@@ -275,6 +275,10 @@ class Pipeline:
                             attempt=state.retry_count,
                             max_attempts=self.config.max_retries,
                         ))
+                        # 자가설정 seam 결선: judge 미달로 재시도 직전에 RuntimeConfigMutator 를
+                        # 신호(judge 점수·threshold·retry 정체)로 호출해 config 자가조정. 게이트=
+                        # config.runtime_self_govern (off=no-op / observe=제안+로그 / act=적용+저널).
+                        await self._self_govern_on_retry(state)
 
             # v1.11.4 (2026-05-17) — synthesis_kick 전면 폐기.
             #
@@ -562,6 +566,66 @@ class Pipeline:
             if _pending:
                 state.system_prompt = _sp_orig
                 state.fetched_pending = []
+
+    async def _self_govern_on_retry(self, state: PipelineState) -> None:
+        """retry 경계 자가설정 결선 — RuntimeConfigMutator 를 신호로 호출.
+
+        하드코딩 없음: 방향은 신호(validation_score vs threshold, retry_count)가 정하고,
+        실제 값은 mutator→algebra 적응형 이웃 생성기가 뽑는다. 게이트=runtime_self_govern
+        (off=no-op / observe=제안+로그 / act=legality 통과분 적용+inverse 저널).
+        """
+        mutator = state.get_config_mutator()
+        if mutator.mode == "off":
+            return
+
+        threshold = getattr(self.config, "validation_threshold", None)
+        n = mutator.propose_from_retry_signals(
+            score=state.validation_score,
+            threshold=threshold,
+            feedback=state.validation_feedback,
+            retry_count=state.retry_count,
+            rag_top_k=state.metadata.get("rag_top_k"),
+        )
+        if n <= 0:
+            return
+
+        diff = mutator.diff()
+        logger.info(
+            "[Pipeline] runtime_self_govern mode=%s — retry 경계 자가조정 %d건: %s",
+            mutator.mode, n, diff,
+        )
+        state.metadata["config_mutator"] = mutator
+        # 환경(연결 RAG 노드) 지배: 자가조정이 검색 stage 의 rag_top_k 를 올렸으면 루프가 실제
+        # 쓰는 라이브 채널(metadata + 등록된 rag_search 도구 인스턴스)에 전파. s04 는 ingress 라
+        # 재실행 안 되므로 도구 인스턴스를 직접 재조정해야 다음 재시도 검색이 넓어진다.
+        _sp = getattr(self.config, "stage_params", None) or {}
+        _rtk_new = (_sp.get("s04_tool") or {}).get("rag_top_k")
+        try:
+            _rtk_new = int(_rtk_new) if _rtk_new is not None else None
+        except (TypeError, ValueError):
+            _rtk_new = None
+        if _rtk_new is not None and _rtk_new != state.metadata.get("rag_top_k"):
+            _old_rtk = state.metadata.get("rag_top_k")
+            state.metadata["rag_top_k"] = _rtk_new
+            _rag_tool = (state.metadata.get("tool_registry") or {}).get("rag_search")
+            if _rag_tool is not None:
+                try:
+                    # default_top_k = LLM 이 top_k 생략 시 기본값 상향. _min_top_k = LLM 이
+                    # 낮게 박아도 못 내려가는 하한(지배).
+                    _rag_tool._default_top_k = _rtk_new
+                    _rag_tool._min_top_k = _rtk_new
+                except Exception as _pe:
+                    logger.debug("[self-govern] rag_search top_k 패치 보류: %s", _pe)
+            logger.info(
+                "[Pipeline] runtime_self_govern — 검색 폭 확장: rag_top_k %s→%s (연결 RAG 도구 라이브 재조정)",
+                _old_rtk, _rtk_new,
+            )
+        from ..events.types import PlanningEvent
+        await state.emit_verbose(PlanningEvent(
+            reasoning="; ".join(diff),
+            source="runtime_self_govern",
+            iteration=state.retry_count,
+        ))
 
     def _find_loop_s00(self) -> Optional[Stage]:
         """v0.16.6 — Planner(role="orchestrator_planner") 인스턴스 조회.

@@ -329,6 +329,20 @@ class PipelineState:
         """해당 kind 의 보존 리소스 id 목록."""
         return list(self.pd_stores.get(kind, {}).keys())
 
+    def get_config_mutator(self) -> Any:
+        """실행 중 자기 config 를 되쓰는 RuntimeConfigMutator 반환.
+
+        mode=config.runtime_self_govern(기본 "off" → 모든 변이 no-op, default-inert).
+        "observe"/"act" opt-in 시에만 살아난다. services 는 metadata["services"]에서(persist_env).
+        """
+        from .runtime_config import RuntimeConfigMutator
+
+        mode = "off"
+        if self.config is not None:
+            mode = getattr(self.config, "runtime_self_govern", "off") or "off"
+        services = self.metadata.get("services") if isinstance(self.metadata, dict) else None
+        return RuntimeConfigMutator(self.config, services=services, mode=mode)
+
     async def emit_verbose(self, event: Any) -> None:
         """HarnessConfig.verbose_events=True 시에만 이벤트 발행.
 
