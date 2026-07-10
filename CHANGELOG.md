@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.29.3 (2026-07-10) — 🔧 retry-death 근절: 판정은 신선한 후보만 채점
+
+- **llm_call**: `last_assistant_text` 를 항상 이번 호출 기준으로 동기화(도구호출-only 턴 → 빈 값).
+  이전엔 직전 실패 답이 남아 judge/decide 가 작업 중 턴을 종점으로 오판, 같은 답을
+  재채점하며 retry 를 연쇄 소진했다(실측: 재시도 후 모델이 도구로 작업 중인데 스테일
+  309자 답을 3연속 0.30 채점 → 3회 소진 실패). judge 의 "답 없으면 채점 안 함" 게이트
+  (judge_then_loop:204)와 decide 인트로 휴리스틱이 설계 의도대로 복원된다.
+- **pipeline**: retry 소비 시 `validation_score` 리셋 — 1 retry = 신선하게 채점된 후보 1회.
+  남겨두면 다음 작업 턴이 ThresholdDecide 점수 분기에서 스테일 점수로 재차 retry.
+- 검증: 실측 3회 연속 — 미달(0.70) → 새 후보 채점(길이 상이) → 1.00 통과, retry 각 1회.
+  pytest 237 passed. forge-engineering CONFIG-FORGE §L2 가 지목한 retry-death 직격 해소.
+
 ## v1.29.2 (2026-07-10) — 🔧 retry 교훈에 검증 사유 기록 (런간 학습 실효화)
 
 - **MemoryStateRecorder.record_iteration**: decision=retry 교훈(lesson)의 정제 입력을
