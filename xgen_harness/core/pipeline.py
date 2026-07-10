@@ -279,8 +279,7 @@ class Pipeline:
                         # 신호(judge 점수·threshold·retry 정체)로 호출해 config 자가조정. 게이트=
                         # config.runtime_self_govern (off=no-op / observe=제안+로그 / act=적용+저널).
                         await self._self_govern_on_retry(state)
-                        # 점수는 여기서 소비(1 retry = 신선하게 채점된 후보 1회) — 남기면
-                        # 다음 작업 턴(도구 진행 중)이 스테일 점수로 retry 를 연쇄 소진한다.
+                        # 점수 소비 — 1 retry = 신선하게 채점된 후보 1회(스테일 점수 연쇄 retry 방지)
                         state.validation_score = None
 
             # v1.11.4 (2026-05-17) — synthesis_kick 전면 폐기.
