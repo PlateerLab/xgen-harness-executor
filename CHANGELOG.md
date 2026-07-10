@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.29.4 (2026-07-10) — 🔍 search_tools 명시 opt-in 존중 (검색우선 기조 정합)
+
+- **discovery**: `stage_params.s04_tool.builtin_tools` 에 `search_tools` 를 명시하면
+  카탈로그 임계(>=12) 미만이어도 등록 — 설정이 휴리스틱에 우선. 이식측이 "메타도구
+  항상 손에" 기조로 항상 요청하던 값이 그동안 무시돼, 소형 워크플로우에선 검색우선
+  기조와 discovery_first(첫 턴 tool-search 강제)가 사문화돼 있었다.
+- 미지정 시 기존 임계 동작 그대로(회귀 0). 실측: 도구 7개 워크플로우에서
+  discovery_first 최초 발동 + forced 검색 턴 포함 미달→새 후보→1.00·retry 1회 완주
+  (v1.29.3 턴 정합과 합주). pytest 237 passed.
+
 ## v1.29.3 (2026-07-10) — 🔧 retry-death 근절: 판정은 신선한 후보만 채점
 
 - **llm_call**: `last_assistant_text` 를 항상 이번 호출 기준으로 동기화(도구호출-only 턴 → 빈 값).
