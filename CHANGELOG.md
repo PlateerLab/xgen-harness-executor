@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.29.2 (2026-07-10) — 🔧 retry 교훈에 검증 사유 기록 (런간 학습 실효화)
+
+- **MemoryStateRecorder.record_iteration**: decision=retry 교훈(lesson)의 정제 입력을
+  s08 judge 의 `state.validation_feedback`(미달 사유) 우선으로 교체. 이전엔 실패한
+  답변 본문이 outcome 이 되어 다음 실행이 교훈을 이월받아도 교정 신호가 없었고,
+  오답이 기억으로 재주입되는 역효과까지 있었다. feedback 부재 시 기존 답변 폴백
+  (validation_feedback 미보유 state 에서도 무해 — getattr 접근).
+- E2E(플랫폼 이식 최신순 정렬과 결합): 초안 미달 → 사유 교훈 기록 → 다음 실행
+  첫 초안 반영, 재시도 0회 통과. pytest 237 passed.
+
 ## v1.27.0 (2026-06-29) — 🧠 유저 기억 회상·추출 동작화 (메모리 P1 마감)
 
 - **S02 회상**: `memory_scopes` 설정 시 MemoryStore 에서 스코프 기억을 키워드 회상,
